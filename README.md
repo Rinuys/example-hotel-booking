@@ -1061,3 +1061,8 @@ book-6f6db947f7-kqggb   2/2     Running   1          18m   192.168.0.47   ip-192
 - 게스트와 호스트가 자주 예약관리에서 확인할 수 있는 상태를 마이페이지(프론트엔드)에서 확인할 수 있어야 한다:
 
 <img width="1440" alt="cqrs" src="https://user-images.githubusercontent.com/45786659/119085956-a9d5d000-ba3f-11eb-80a6-7c3210c02823.png">
+
+
+# 신규 조직의 추가
+
+
