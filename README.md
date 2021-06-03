@@ -1065,4 +1065,10 @@ book-6f6db947f7-kqggb   2/2     Running   1          18m   192.168.0.47   ip-192
 
 # 신규 조직의 추가
 
+## 마켓팅팀 추가
 
+![image](https://user-images.githubusercontent.com/11704927/120576924-8018a200-c45e-11eb-9a48-009cabbe950a.png)
+
+
+
+## 고객센터 추가
