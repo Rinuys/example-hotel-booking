@@ -1132,6 +1132,10 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 kubectl create ns kafka
 helm install my-kafka bitnami/kafka --namespace kafka
 
+# Metric Server 설치
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.3.7/components.yaml
+kubectl get deployment metrics-server -n kube-system
+
 # myhotel namespace 생성
 kubectl create namespace myhotel
 
@@ -1395,4 +1399,109 @@ kubectl apply -f marketing.yaml
 
 ![image](https://user-images.githubusercontent.com/11704927/120669664-9f4d1900-c4ca-11eb-826d-e6a1a1f7da48.png)
 
+
+## 운영
+
+### CI/CD 적용
+각 구현체들은 각자의 source repository 에 구성되었고, 사용한 CI/CD 플랫폼은 AWS를 사용하였으며, pipeline build script 는 각 프로젝트 폴더 이하에 cloudbuild.yml 에 포함되었다.
+
+### 동기식 호출 / 서킷 브레이킹 / 장애격리
+
+#### 서킷 브레이킹 프레임워크의 선택 : istio-injection + DestinationRule
+
+- istio-injection 적용 (기 적용 완료)
+
+```
+$ kubectl label namespace myhotel istio-injection=enabled --overwrite
+```
+
+- 예약, 결제 서비스 모두 아무런 변경 없음
+- 부하테스터 siege 툴을 통한 서킷 브레이커 동작 확인:
+- 동시사용자 255명
+- 180초 동안 실시
+
+```
+$ siege -v -c255 -t180S -r10 http://a6d2c71719a5e417ab17ee6d8426fcfc-196802735.ap-southeast-1.elb.amazonaws.com:8080/rooms
+```
+
+![image](https://user-images.githubusercontent.com/11704927/120671856-be4caa80-c4cc-11eb-8bbd-8ef2578dae5a.png)
+
+![image](https://user-images.githubusercontent.com/11704927/120672287-20a5ab00-c4cd-11eb-8076-29a995393568.png)
+
+- 서킷브레이킹을 위한 DestinationRule 적용
+
+
+```
+$ cd myhotel/yaml
+$ kubectl apply -f dr-room.yaml
+
+# dr-room.yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: dr-room
+  namespace: myhotel
+spec:
+  host: room
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 1
+        maxRequestsPerConnection: 1
+    outlierDetection:
+      interval: 1s
+      consecutiveErrors: 2
+      baseEjectionTime: 10s
+      maxEjectionPercent: 100
+```
+
+- DestinationRule 적용되어 서킷 브레이킹 동작 확인 (Kiali Graph)
+
+![image](https://user-images.githubusercontent.com/11704927/120672636-737f6280-c4cd-11eb-9bfa-18fb847c66e2.png)
+
+![image](https://user-images.githubusercontent.com/11704927/120672749-8b56e680-c4cd-11eb-923c-905a4adfcfa7.png)
+
+- 다시 부하 발생하여 DestinationRule 적용 제거하여 정상 처리 확인
+
+```
+$ cd myhotel/yaml
+$ kubectl delete -f dr-room.yaml
+```
+
+![image](https://user-images.githubusercontent.com/11704927/120672956-b93c2b00-c4cd-11eb-9e26-00a871059b6e.png)
+
+
+### 오토스케일 아웃
+
+앞서 CB 는 시스템을 안정되게 운영할 수 있게 해줬지만 사용자의 요청을 100% 받아들여주지 못했기 때문에 이에 대한 보완책으로 자동화된 확장 기능을 적용하고자 한다.
+
+- 오토스케일 아웃 테스트를 위하여 room.yaml 파일 spec indent에 메모리 설정에 대한 문구를 추가한다
+
+![image](https://user-images.githubusercontent.com/11704927/120673632-4f705100-c4ce-11eb-85e1-94b2cdd5affb.png)
+
+
+- 방 서비스에 대한 replica 를 동적으로 늘려주도록 HPA 를 설정한다. 설정은 CPU 사용량이 3프로를 넘어서면 replica 를 10개까지 늘려준다
+
+```
+$ kubectl autoscale deploy room --min=1 --max=10 --cpu-percent=3 -n myhotel
+```
+
+- CB 에서 했던 방식대로 워크로드를 3분 동안 걸어준다.
+
+```
+$ siege -v -c255 -t360S -r10 --content-type "application/json" 'http://a6d2c71719a5e417ab17ee6d8426fcfc-196802735.ap-southeast-1.elb.amazonaws.com:8080/rooms POST {"price":1000'}
+```
+
+- 오토스케일이 어떻게 되고 있는지 모니터링을 걸어둔다
+
+```
+$ kubectl get deploy room -w -n myhotel
+```
+
+- 어느정도 시간이 흐른 후 (약 30초) 스케일 아웃이 벌어지는 것을 확인할 수 있다:
+
+![image](https://user-images.githubusercontent.com/11704927/120684679-f4445b80-c4d9-11eb-9dc6-a14cfc1bf852.png)
+
+
+## 무정지 배포
 
