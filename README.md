@@ -1074,7 +1074,6 @@ book-6f6db947f7-kqggb   2/2     Running   1          18m   192.168.0.47   ip-192
 - 유저가 결제할 경우 해당 예약정보를 저장한다.
 - 호스트가 방을 등록할 경우 정보를 저장한다.
 - mypage에 인기도를 표현한다.
-- 예약이 취소되거나 방이 없어져도 인기도를 유지한다.
 
 ### 고객센터 추가
 
@@ -1090,5 +1089,16 @@ book-6f6db947f7-kqggb   2/2     Running   1          18m   192.168.0.47   ip-192
 
 - 추가한 Event Storming
 
-![image](https://user-images.githubusercontent.com/11704927/120577792-c3bfdb80-c45f-11eb-8e1a-4c9188c60db4.png)
+![image](https://user-images.githubusercontent.com/11704927/120588029-67fe4e00-c471-11eb-9561-b77477219f71.png)
+
+## 추가 요구사항 검증
+
+![image](https://user-images.githubusercontent.com/11704927/120588488-3cc82e80-c472-11eb-8e92-a33db5611302.png)
+- 유저가 결제할 경우 해당 예약정보를 저장한다.(OK)
+- 호스트가 방을 등록할 경우 정보를 저장한다.(OK)
+- mypage에 인기도를 표현한다.(OK)
+
+![image](https://user-images.githubusercontent.com/11704927/120588379-0ab6cc80-c472-11eb-8365-f914c8cb0138.png)
+- 고객불만으로 인해 고객센터에서 예약을 취소할 수 있다.(즉시 취소)(OK)
+- 고객불만으로 인해 고객센터에서 방을 없앨 수 있다.(즉시 삭제)(OK)
 
