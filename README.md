@@ -1102,3 +1102,9 @@ book-6f6db947f7-kqggb   2/2     Running   1          18m   192.168.0.47   ip-192
 - 고객불만으로 인해 고객센터에서 예약을 취소할 수 있다.(즉시 취소)(OK)
 - 고객불만으로 인해 고객센터에서 방을 없앨 수 있다.(즉시 삭제)(OK)
 
+### 헥사고날 아키텍처 다이어그램 도출
+
+![image](https://user-images.githubusercontent.com/11704927/120656306-7888e580-c4be-11eb-9cea-1a997d6a844e.png)
+
+
+
