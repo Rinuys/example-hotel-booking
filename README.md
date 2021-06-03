@@ -1282,6 +1282,7 @@ public class Book {
 }
 ```
 - 동기식 호출로 연결되어 있는 고객센터(servicecenter)->예약(book) 간의 연결 상황을 Kiali Graph로 확인한 결과 (Web UI 이용하여 book DELETE)
+
 ![image](https://user-images.githubusercontent.com/11704927/120661484-4928a780-c4c3-11eb-8cff-dabba89d7b8b.png)
 
 - 동기식 호출에서는 호출 시간에 따른 타임 커플링이 발생하며, 예약 시스템이 장애가 나면 고객센터에서 예약을 취소할 수 없는 것을 확인:
@@ -1291,19 +1292,84 @@ cd yaml
 $ kubectl delete -f book.yaml
 ```
 ![image](https://user-images.githubusercontent.com/11704927/120662953-89d4f080-c4c4-11eb-98e5-10f5cd14a50e.png)
+
 - 고객센터에서 예약 취소시 500에러 발생
+
 ![image](https://user-images.githubusercontent.com/11704927/120663075-acffa000-c4c4-11eb-9698-0ef9ca69b0b7.png)
+
 ```
 # 예약 서비스 재기동
 $ kubectl apply -f book.yaml
 ```
+
 - 재기동 후 정상 삭제 확인
+
 ![image](https://user-images.githubusercontent.com/11704927/120663768-4929a700-c4c5-11eb-8c9e-98a67675be3a.png)
+
 ![image](https://user-images.githubusercontent.com/11704927/120663644-2ac3ab80-c4c5-11eb-957a-4e9e30cdfb0b.png)
+
 - 또한 과도한 요청시에 서비스 장애가 도미노 처럼 벌어질 수 있다. (서킷브레이커, 폴백 처리는 운영단계에서 설명한다.)
 
+## 비동기식 호출 / 시간적 디커플링 / 장애격리 / 최종 (Eventual) 일관성 테스트
 
+방을 등록한 후에 마케팅 처리는 동기식이 아니라 비 동기식으로 처리하여 마케팅 시스템의 처리를 위하여 방 등록 블로킹 되지 않아도록 처리한다.
 
+- 이를 위하여 방 관리에 기록을 남긴 후에 도메인 이벤트를 카프카로 송출한다(Publish)
+
+```
+@PostPersist
+    public void onPostPersist(){
+        RoomRegistered roomRegistered = new RoomRegistered();
+        BeanUtils.copyProperties(this, roomRegistered);
+        roomRegistered.publishAfterCommit();
+    }
+```
+
+- 마케팅 서비스에서는 방 등록 완료 이벤트에 대해서 이를 수신하여 자신의 정책을 처리하도록 PolicyHandler를 구현한다
+
+```
+    @StreamListener(KafkaProcessor.INPUT)
+    public void wheneverRoomRegistered_RoomAdd(@Payload RoomRegistered roomRegistered){
+
+        if(!roomRegistered.validate()) return;
+
+        System.out.println("\n\n##### listener RoomAdd : " + roomRegistered.toJson() + "\n\n");
+
+        Marketing marketing = new Marketing();
+        marketing.setRoomId(roomRegistered.getId());
+        marketing.setBookCount(0);
+        marketingRepository.save(marketing);
+            
+    }
+```
+
+- 마케팅 시스템은 방 관리와 완전히 분리되어있으며, 이벤트 수신에 따라 처리되기 때문에, 마케팅 시스템이 유지보수로 인해 잠시 내려간 상태라도 예약을 받는데 문제가 없다
+
+```
+# 마케팅 서비스를 잠시 내려놓음
+cd yaml
+kubectl delete -f marketing.yaml
+```
+
+![image](https://user-images.githubusercontent.com/11704927/120667515-893e5900-c4c8-11eb-94c3-992107876c53.png)
+
+![image](https://user-images.githubusercontent.com/11704927/120667574-9a876580-c4c8-11eb-9b5b-ec7ece05b609.png)
+
+마케팅 기록 조회(불가, 500 Error)
+
+![image](https://user-images.githubusercontent.com/11704927/120667792-cc003100-c4c8-11eb-909a-d5ba8008cf92.png)
+
+```
+# 마케팅 서비스를 실행
+cd yaml
+kubectl apply -f marketing.yaml
+```
+
+![image](https://user-images.githubusercontent.com/11704927/120668077-14b7ea00-c4c9-11eb-8734-5bf09cbf7498.png)
+
+마케팅 기록 조회
+
+![image](https://user-images.githubusercontent.com/11704927/120668309-4fba1d80-c4c9-11eb-85ac-920ccf93d3e7.png)
 
 
 
