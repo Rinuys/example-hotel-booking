@@ -1065,7 +1065,7 @@ book-6f6db947f7-kqggb   2/2     Running   1          18m   192.168.0.47   ip-192
 
 # 신규 조직의 추가
 
-## 마켓팅팀, 고객센터 추가
+## 마케팅팀, 고객센터 추가
 
 ![image](https://user-images.githubusercontent.com/11704927/120576924-8018a200-c45e-11eb-9a48-009cabbe950a.png)
 
@@ -1102,9 +1102,151 @@ book-6f6db947f7-kqggb   2/2     Running   1          18m   192.168.0.47   ip-192
 - 고객불만으로 인해 고객센터에서 예약을 취소할 수 있다.(즉시 취소)(OK)
 - 고객불만으로 인해 고객센터에서 방을 없앨 수 있다.(즉시 삭제)(OK)
 
-### 헥사고날 아키텍처 다이어그램 도출
+## 헥사고날 아키텍처 다이어그램 도출
 
 ![image](https://user-images.githubusercontent.com/11704927/120656306-7888e580-c4be-11eb-9cea-1a997d6a844e.png)
+- Chris Richardson, MSA Patterns 참고하여 Inbound adaptor와 Outbound adaptor를 구분함
+- 호출관계에서 PubSub 과 Req/Resp 를 구분함
+- 서브 도메인과 바운디드 컨텍스트의 분리:  각 팀의 KPI 별로 아래와 같이 관심 구현 스토리를 나눠가짐
 
+## 구현
+```
+# eks cluster 생성
+eksctl create cluster --name user11-eks --version 1.17 --nodegroup-name standard-workers --node-type t3.medium --nodes 4 --nodes-min 1 --nodes-max 4
+
+# eks cluster 설정
+aws eks --region ap-southeast-1 update-kubeconfig --name user11-eks
+kubectl config current-context
+
+# Helm 설치
+curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 > get_helm.sh
+chmod 700 get_helm.sh
+./get_helm.sh
+(Helm 에게 권한을 부여하고 초기화)
+kubectl --namespace kube-system create sa tiller
+kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
+
+# Kafka 설치
+helm repo update
+helm repo add bitnami https://charts.bitnami.com/bitnami
+kubectl create ns kafka
+helm install my-kafka bitnami/kafka --namespace kafka
+
+# myhotel namespace 생성
+kubectl create namespace myhotel
+
+# myhotel image build & push
+cd myhotel/book
+mvn package
+docker build -t 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/book:latest .
+docker push 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/book:latest
+
+# myhotel deploy
+cd myhotel/yaml
+kubectl apply -f configmap.yaml
+kubectl apply -f gateway.yaml
+kubectl apply -f room.yaml
+kubectl apply -f book.yaml
+kubectl apply -f pay.yaml
+kubectl apply -f mypage.yaml
+kubectl apply -f alarm.yaml
+kubectl apply -f marketing.yaml
+kubectl apply -f servicecenter.yaml
+kubectl apply -f siege.yaml
+```
+
+### 현황
+![image](https://user-images.githubusercontent.com/11704927/120657338-5f346900-c4bf-11eb-960c-6d33a915b39c.png)
+![image](https://user-images.githubusercontent.com/11704927/120657646-a7538b80-c4bf-11eb-84fa-65ae2bc8d4fd.png)
+![image](https://user-images.githubusercontent.com/11704927/120657550-90ad3480-c4bf-11eb-8a5f-a08c0c618a15.png)
+
+
+## DDD의 적용
+- 각 서비스내에 도출된 핵심 Aggregate Root 객체를 Entity 로 선언하였다: (예시는 marketing 마이크로 서비스). 이때 가능한 현업에서 사용하는 언어 (유비쿼터스 랭귀지)를 그대로 사용하려고 노력했다.
+```
+package intensiveteamhslee;
+
+import javax.persistence.*;
+import org.springframework.beans.BeanUtils;
+import java.util.List;
+import java.util.Date;
+
+@Entity
+@Table(name="Marketing_table")
+public class Marketing {
+
+    @Id
+    @GeneratedValue(strategy=GenerationType.AUTO)
+    private Long id;
+    private Long roomId;
+    private Integer bookCount;
+
+    @PostPersist
+    public void onPostPersist(){
+        BookCounted bookCounted = new BookCounted();
+        BeanUtils.copyProperties(this, bookCounted);
+        bookCounted.publishAfterCommit();
+
+
+    }
+
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+    public Long getRoomId() {
+        return roomId;
+    }
+
+    public void setRoomId(Long roomId) {
+        this.roomId = roomId;
+    }
+
+    public Integer getBookCount() {
+        return bookCount;
+    }
+
+    public void setBookCount(Integer bookCount) {
+        this.bookCount = bookCount;
+    }
+
+
+
+
+}
+
+```
+
+- Entity Pattern 과 Repository Pattern 을 적용하여 JPA 를 통하여 다양한 데이터소스 유형 (RDB or NoSQL) 에 대한 별도의 처리가 없도록 데이터 접근 어댑터를 자동 생성하기 위하여 Spring Data REST 의 RestRepository 를 적용하였다
+
+```
+package intensiveteamhslee;
+
+import org.springframework.data.repository.PagingAndSortingRepository;
+import org.springframework.data.rest.core.annotation.RepositoryRestResource;
+
+import feign.Param;
+
+
+@RepositoryRestResource(collectionResourceRel="marketings", path="marketings")
+public interface MarketingRepository extends PagingAndSortingRepository<Marketing, Long>{
+    Marketing findByRoomId(@Param("roomId") Long roomId);
+}
+```
+- 적용 후 REST API 의 테스트
+```
+# 룸 등록처리
+http POST http://room:8080/rooms price=1500
+
+# 예약처리
+http POST http://book:8080/books roomId=1 price=1000 startDate=20210505 endDate=20210508
+
+# 예약 상태 확인
+http http://book:8080/books/1
+```
 
 
