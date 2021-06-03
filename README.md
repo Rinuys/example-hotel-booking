@@ -1065,10 +1065,30 @@ book-6f6db947f7-kqggb   2/2     Running   1          18m   192.168.0.47   ip-192
 
 # 신규 조직의 추가
 
-## 마켓팅팀 추가
+## 마켓팅팀, 고객센터 추가
 
 ![image](https://user-images.githubusercontent.com/11704927/120576924-8018a200-c45e-11eb-9a48-009cabbe950a.png)
 
+### 마케팅팀 추가
+
+- 유저가 결제할 경우 해당 예약정보를 저장한다.
+- 호스트가 방을 등록할 경우 정보를 저장한다.
+- mypage에 인기도를 표현한다.
+- 예약이 취소되거나 방이 없어져도 인기도를 유지한다.
+
+### 고객센터 추가
+
+- 고객불만으로 인해 고객센터에서 예약을 취소할 수 있다.(즉시 취소)
+- 고객불만으로 인해 고객센터에서 방을 없앨 수 있다.(즉시 삭제)
+
+## Event Storming
+
+- 기존 Event Storming
+
+![image](https://user-images.githubusercontent.com/11704927/120578058-287b3600-c460-11eb-934e-f74e6d157aa2.png)
 
 
-## 고객센터 추가
+- 추가한 Event Storming
+
+![image](https://user-images.githubusercontent.com/11704927/120577792-c3bfdb80-c45f-11eb-8e1a-4c9188c60db4.png)
+
