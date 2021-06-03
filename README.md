@@ -1353,6 +1353,8 @@ kubectl delete -f marketing.yaml
 
 ![image](https://user-images.githubusercontent.com/11704927/120667515-893e5900-c4c8-11eb-94c3-992107876c53.png)
 
+방 생성(6번)
+
 ![image](https://user-images.githubusercontent.com/11704927/120667574-9a876580-c4c8-11eb-9b5b-ec7ece05b609.png)
 
 마케팅 기록 조회(불가, 500 Error)
@@ -1371,5 +1373,26 @@ kubectl apply -f marketing.yaml
 
 ![image](https://user-images.githubusercontent.com/11704927/120668309-4fba1d80-c4c9-11eb-85ac-920ccf93d3e7.png)
 
+
+## Correlation 테스트
+서비스를 이용해 만들어진 각 이벤트 건은 Correlation-key 연결을 통해 식별이 가능하다.
+
+- Correlation-key로 식별하여 예약취소(servicecenter) 이벤트를 통해 생성된 예약취소(book) 건에 대해 예약 취소 시 동일한 Correlation-key를 가지는 예약(Book) 이벤트 건 역시 삭제되는 모습을 확인한다:
+
+예약(book) 이벤트 건 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120669024-028a7b80-c4ca-11eb-8ddb-ceccdcd3d990.png)
+
+위 예약 ID값을 serviceCenter에 입력하여 예약취소 이벤트 발생
+
+![image](https://user-images.githubusercontent.com/11704927/120669215-3796ce00-c4ca-11eb-857f-87dc208f18e0.png)
+
+예약(book) 페이지에서 해당 id의 예약이 삭제되었는지 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120669338-5301d900-c4ca-11eb-98b8-996788e5a816.png)
+
+알림(notification) 페이지에서 예약과 결제가 삭제된 것을 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120669664-9f4d1900-c4ca-11eb-826d-e6a1a1f7da48.png)
 
 
