@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: book
-          image: 740569282574.dkr.ecr.ap-northeast-1.amazonaws.com/book:latest
+          image: 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-book:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

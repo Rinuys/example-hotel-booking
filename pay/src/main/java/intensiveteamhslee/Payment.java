@@ -23,6 +23,7 @@ public class Payment {
     public void onPostPersist(){
         PaymentApproved paymentApproved = new PaymentApproved();
         BeanUtils.copyProperties(this, paymentApproved);
+        paymentApproved.setStatus("PamentApproved");
         paymentApproved.publishAfterCommit();
 
 
@@ -32,6 +33,7 @@ public class Payment {
     public void onPostUpdate(){
         PaymentCanceled paymentCanceled = new PaymentCanceled();
         BeanUtils.copyProperties(this, paymentCanceled);
+        paymentCanceled.setStatus("PaymentCanceld");
         paymentCanceled.publishAfterCommit();
 
 

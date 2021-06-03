@@ -28,7 +28,7 @@ public class Book {
 
         intensiveteamhslee.external.Payment payment = new intensiveteamhslee.external.Payment();
         // mappings goes here
-        Application.applicationContext.getBean(intensiveteamhslee.external.PaymentService.class)
+        BookApplication.applicationContext.getBean(intensiveteamhslee.external.PaymentService.class)
             .pay(payment);
 
 

@@ -1,5 +1,7 @@
 package intensiveteamhslee;
 
+import java.util.Date;
+
 public class PaymentCanceled extends AbstractEvent {
 
     private Long id;

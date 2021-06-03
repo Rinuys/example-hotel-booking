@@ -1,0 +1,10 @@
+/home/project/example-hotel-booking/marketing/src/main/java/intensiveteamhslee/MarketingController.java
+/home/project/example-hotel-booking/marketing/src/main/java/intensiveteamhslee/MarketingRepository.java
+/home/project/example-hotel-booking/marketing/src/main/java/intensiveteamhslee/AbstractEvent.java
+/home/project/example-hotel-booking/marketing/src/main/java/intensiveteamhslee/PolicyHandler.java
+/home/project/example-hotel-booking/marketing/src/main/java/intensiveteamhslee/BookCounted.java
+/home/project/example-hotel-booking/marketing/src/main/java/intensiveteamhslee/Marketing.java
+/home/project/example-hotel-booking/marketing/src/main/java/intensiveteamhslee/MarketingApplication.java
+/home/project/example-hotel-booking/marketing/src/main/java/intensiveteamhslee/config/kafka/KafkaProcessor.java
+/home/project/example-hotel-booking/marketing/src/main/java/intensiveteamhslee/Booked.java
+/home/project/example-hotel-booking/marketing/src/main/java/intensiveteamhslee/RoomRegistered.java

@@ -2,6 +2,7 @@ package intensiveteamhslee;
 
 import javax.persistence.*;
 import java.util.List;
+import java.util.Date;
 
 @Entity
 @Table(name="GuestManagementPage_table")

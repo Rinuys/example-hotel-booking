@@ -26,7 +26,7 @@ public class ServiceCenter {
 
         intensiveteamhslee.external.Book book = new intensiveteamhslee.external.Book();
         // mappings goes here
-        Application.applicationContext.getBean(intensiveteamhslee.external.BookService.class)
+        ServiceCenterApplication.applicationContext.getBean(intensiveteamhslee.external.BookService.class)
             .bookCancel(book);
 
 
@@ -39,7 +39,7 @@ public class ServiceCenter {
 
         intensiveteamhslee.external.Room room = new intensiveteamhslee.external.Room();
         // mappings goes here
-        Application.applicationContext.getBean(intensiveteamhslee.external.RoomService.class)
+        ServiceCenterApplication.applicationContext.getBean(intensiveteamhslee.external.RoomService.class)
             .deleteRoom(room);
 
 

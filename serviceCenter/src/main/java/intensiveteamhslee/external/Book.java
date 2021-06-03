@@ -1,5 +1,7 @@
 package intensiveteamhslee.external;
 
+import java.util.Date;
+
 public class Book {
 
     private Long id;

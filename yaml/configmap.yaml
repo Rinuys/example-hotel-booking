@@ -6,3 +6,4 @@ metadata:
 data:
   api.url.payment: http://pay:8080
   alarm.prefix: Hello
+  marketing.prefix: World

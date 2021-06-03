@@ -1,6 +1,8 @@
 
 package intensiveteamhslee;
 
+import java.util.Date;
+
 public class Booked extends AbstractEvent {
 
     private Long id;
