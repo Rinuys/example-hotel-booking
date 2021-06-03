@@ -1,9 +1,0 @@
-/home/project/example-hotel-booking/mypage/src/main/java/intensiveteam/config/kafka/KafkaProcessor.java
-/home/project/example-hotel-booking/mypage/src/main/java/intensiveteam/Booked.java
-/home/project/example-hotel-booking/mypage/src/main/java/intensiveteam/GuestManagementPageViewHandler.java
-/home/project/example-hotel-booking/mypage/src/main/java/intensiveteam/GuestManagementPageRepository.java
-/home/project/example-hotel-booking/mypage/src/main/java/intensiveteam/GuestManagementPage.java
-/home/project/example-hotel-booking/mypage/src/main/java/intensiveteam/BookCanceled.java
-/home/project/example-hotel-booking/mypage/src/main/java/intensiveteam/AbstractEvent.java
-/home/project/example-hotel-booking/mypage/src/main/java/intensiveteam/PolicyHandler.java
-/home/project/example-hotel-booking/mypage/src/main/java/intensiveteam/MypageApplication.java

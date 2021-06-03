@@ -42,18 +42,6 @@
             Price :  {{value.price }}
           </div>
           <div class="grey--text ml-4" v-if="editMode" style = "margin-top:-20px;">
-            <v-text-field type="number" label="HostId" v-model="value.hostId"/>
-          </div>
-          <div class="grey--text ml-4" v-else>
-            HostId :  {{value.hostId }}
-          </div>
-          <div class="grey--text ml-4" v-if="editMode" style = "margin-top:-20px;">
-            <v-text-field type="number" label="GuestId" v-model="value.guestId"/>
-          </div>
-          <div class="grey--text ml-4" v-else>
-            GuestId :  {{value.guestId }}
-          </div>
-          <div class="grey--text ml-4" v-if="editMode" style = "margin-top:-20px;">
             <v-menu
                 v-model="menu"
                 width="290px"
@@ -104,10 +92,10 @@
             EndDate :  {{value.endDate }}
           </div>
           <div class="grey--text ml-4" v-if="editMode" style = "margin-top:-20px;">
-            <v-text-field label="Status" v-model="value.status"/>
+            <v-text-field label="BookStatus" v-model="value.bookStatus"/>
           </div>
           <div class="grey--text ml-4" v-else>
-            Status :  {{value.status }}
+            BookStatus :  {{value.bookStatus }}
           </div>
 
 

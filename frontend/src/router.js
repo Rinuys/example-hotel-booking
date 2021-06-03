@@ -15,10 +15,13 @@ import BookManager from "./components/BookManager"
 
 import NotificationManager from "./components/NotificationManager"
 
+import MarketingManager from "./components/MarketingManager"
+
+import ServiceCenterManager from "./components/ServiceCenterManager"
+
 export default new Router({
     // mode: 'history',
     base: process.env.BASE_URL,
-    // base: "http://ac9d3799901094257960c3613da58e56-1202669080.ap-northeast-1.elb.amazonaws.com:8080",
     routes: [
             {
                 path: '/Payment',
@@ -48,6 +51,18 @@ export default new Router({
                 path: '/Notification',
                 name: 'NotificationManager',
                 component: NotificationManager
+            },
+
+            {
+                path: '/Marketing',
+                name: 'MarketingManager',
+                component: MarketingManager
+            },
+
+            {
+                path: '/ServiceCenter',
+                name: 'ServiceCenterManager',
+                component: ServiceCenterManager
             },
 
 

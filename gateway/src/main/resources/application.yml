@@ -28,6 +28,14 @@ spring:
           uri: http://localhost:8085
           predicates:
             - Path=/notifications/** 
+        - id: marketing
+          uri: http://localhost:8086
+          predicates:
+            - Path=/marketings/** 
+        - id: serviceCenter
+          uri: http://localhost:8087
+          predicates:
+            - Path=/serviceCenters/** 
       globalcors:
         corsConfigurations:
           '[/**]':
@@ -67,6 +75,14 @@ spring:
           uri: http://alarm:8080
           predicates:
             - Path=/notifications/** 
+        - id: marketing
+          uri: http://marketing:8080
+          predicates:
+            - Path=/marketings/** 
+        - id: serviceCenter
+          uri: http://serviceCenter:8080
+          predicates:
+            - Path=/serviceCenters/** 
       globalcors:
         corsConfigurations:
           '[/**]':

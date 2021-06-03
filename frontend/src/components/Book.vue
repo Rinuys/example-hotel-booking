@@ -23,6 +23,69 @@
 
     <v-card-text style = "margin-left:-15px; margin-top:10px;">
 
+          <div class="grey--text ml-4" v-if="editMode" style = "margin-top:-20px;">
+            <v-text-field type="number" label="RoomId" v-model="value.roomId"/>
+          </div>
+          <div class="grey--text ml-4" v-else>
+            RoomId :  {{value.roomId }}
+          </div>
+          <div class="grey--text ml-4" v-if="editMode" style = "margin-top:-20px;">
+            <v-menu
+                v-model="menu"
+                width="290px"
+            >
+                <template v-slot:activator="{ on, attrs }">
+                <v-text-field
+                    v-model="value.startDate"
+                    label="StartDate"
+                    prepend-icon="mdi-calendar"
+                    readonly
+                    v-bind="attrs"
+                    v-on="on"
+                ></v-text-field>
+                </template>
+                <v-date-picker
+                v-model="value.startDate"
+                :min="new Date().toISOString().substr(0, 10)"
+                @input="menu = false"
+                ></v-date-picker>
+            </v-menu>
+          </div>
+          <div class="grey--text ml-4" v-else>
+            StartDate :  {{value.startDate }}
+          </div>
+          <div class="grey--text ml-4" v-if="editMode" style = "margin-top:-20px;">
+            <v-menu
+                v-model="menu"
+                width="290px"
+            >
+                <template v-slot:activator="{ on, attrs }">
+                <v-text-field
+                    v-model="value.endDate"
+                    label="EndDate"
+                    prepend-icon="mdi-calendar"
+                    readonly
+                    v-bind="attrs"
+                    v-on="on"
+                ></v-text-field>
+                </template>
+                <v-date-picker
+                v-model="value.endDate"
+                :min="new Date().toISOString().substr(0, 10)"
+                @input="menu = false"
+                ></v-date-picker>
+            </v-menu>
+          </div>
+          <div class="grey--text ml-4" v-else>
+            EndDate :  {{value.endDate }}
+          </div>
+          <div class="grey--text ml-4" v-if="editMode" style = "margin-top:-20px;">
+            <v-text-field label="Status" v-model="value.status"/>
+          </div>
+          <div class="grey--text ml-4" v-else>
+            Status :  {{value.status }}
+          </div>
+
 
     </v-card-text>
 
