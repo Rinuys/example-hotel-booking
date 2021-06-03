@@ -1249,4 +1249,61 @@ http POST http://book:8080/books roomId=1 price=1000 startDate=20210505 endDate=
 http http://book:8080/books/1
 ```
 
+## 동기식 호출과 Fallback 처리
+분석단계에서의 조건 중 하나로 고객센터(servicecenter)->예약(book), 고객센터(servicecenter)->방(room) 간의 호출은 동기식 일관성을 유지하는 트랜잭션으로 처리하기로 하였다. 호출 프로토콜은 이미 앞서 Rest Repository 에 의해 노출되어있는 REST 서비스를 FeignClient 를 이용하여 호출하도록 한다.
+
+- 예약 서비스를 호출하기 위하여 Stub과 (FeignClient) 를 이용하여 Service 대행 인터페이스 (Proxy) 를 구현
+```
+# (book) BookService.java 
+
+@FeignClient(name="book", url="http://book:8080")
+public interface BookService {
+
+    @RequestMapping(method= RequestMethod.DELETE, path="/books/{id}")
+    public void bookCancel(@PathVariable("id") Long id);
+
+}
+```
+- 예약 취소를 받은 직후(@PostRemove) 예약 취소 처리 진행
+```
+@Entity
+@Table(name="Book_table")
+public class Book {
+    
+    ...
+
+    @PostRemove
+    public void onPostRemove(){
+        BookCanceled bookCanceled = new BookCanceled();
+        BeanUtils.copyProperties(this, bookCanceled);
+        bookCanceled.publishAfterCommit();
+    }
+
+}
+```
+- 동기식 호출로 연결되어 있는 고객센터(servicecenter)->예약(book) 간의 연결 상황을 Kiali Graph로 확인한 결과 (Web UI 이용하여 book DELETE)
+![image](https://user-images.githubusercontent.com/11704927/120661484-4928a780-c4c3-11eb-8cff-dabba89d7b8b.png)
+
+- 동기식 호출에서는 호출 시간에 따른 타임 커플링이 발생하며, 예약 시스템이 장애가 나면 고객센터에서 예약을 취소할 수 없는 것을 확인:
+```
+# 예약 서비스를 잠시 내려놓음
+cd yaml
+$ kubectl delete -f book.yaml
+```
+![image](https://user-images.githubusercontent.com/11704927/120662953-89d4f080-c4c4-11eb-98e5-10f5cd14a50e.png)
+- 고객센터에서 예약 취소시 500에러 발생
+![image](https://user-images.githubusercontent.com/11704927/120663075-acffa000-c4c4-11eb-9698-0ef9ca69b0b7.png)
+```
+# 예약 서비스 재기동
+$ kubectl apply -f book.yaml
+```
+- 재기동 후 정상 삭제 확인
+![image](https://user-images.githubusercontent.com/11704927/120663768-4929a700-c4c5-11eb-8c9e-98a67675be3a.png)
+![image](https://user-images.githubusercontent.com/11704927/120663644-2ac3ab80-c4c5-11eb-957a-4e9e30cdfb0b.png)
+- 또한 과도한 요청시에 서비스 장애가 도미노 처럼 벌어질 수 있다. (서킷브레이커, 폴백 처리는 운영단계에서 설명한다.)
+
+
+
+
+
 
