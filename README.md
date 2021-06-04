@@ -1489,7 +1489,7 @@ $ kubectl autoscale deploy room --min=1 --max=10 --cpu-percent=3 -n myhotel
 - CB 에서 했던 방식대로 워크로드를 3분 동안 걸어준다.
 
 ```
-$ siege -v -c255 -t360S -r10 --content-type "application/json" 'http://a6d2c71719a5e417ab17ee6d8426fcfc-196802735.ap-southeast-1.elb.amazonaws.com:8080/rooms POST {"price":1000'}
+$ siege -v -c255 -t360S -r10 --content-type "application/json" 'http://a6d2c71719a5e417ab17ee6d8426fcfc-196802735.ap-southeast-1.elb.amazonaws.com:8080/rooms POST {"price":1000}'
 ```
 
 - 오토스케일이 어떻게 되고 있는지 모니터링을 걸어둔다
@@ -1503,5 +1503,293 @@ $ kubectl get deploy room -w -n myhotel
 ![image](https://user-images.githubusercontent.com/11704927/120684679-f4445b80-c4d9-11eb-9dc6-a14cfc1bf852.png)
 
 
-## 무정지 배포
+## 무정지 재배포
 
+- 먼저 무정지 재배포가 100% 되는 것인지 확인하기 위해서 Autoscaler 이나 CB 설정을 제거함 (위의 시나리오에서 제거되었음)
+- seige 로 배포작업 직전에 워크로드를 모니터링 함.
+
+```
+$ siege -v -c1 -t360S -r10 --content-type "application/json" 'http://a4fd531f242294642ae968cf3e09a367-1307748764.ap-southeast-1.elb.amazonaws.com:8080/rooms'
+```
+
+- 새버전으로의 배포 시작
+
+```
+# 컨테이너 이미지 Update (readness, liveness 미설정 상태)
+$ kubectl apply -f room_na.yaml
+```
+
+- seige 의 화면으로 넘어가서 Availability 가 100% 미만으로 떨어졌는지 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120728147-39d34980-c517-11eb-91a2-a96478fd40a0.png)
+
+- 배포기간중 Availability 가 평소 100%에서 70% 대로 떨어지는 것을 확인. 원인은 쿠버네티스가 성급하게 새로 올려진 서비스를 READY 상태로 인식하여 서비스 유입을 진행한 것이기 때문. 이를 막기위해 Readiness Probe 를 설정함:
+
+```
+# deployment.yaml 의 readiness probe 설정:
+$ kubectl apply -f room.yaml
+
+NAME                            READY   STATUS    RESTARTS   AGE
+alarm-7f797dc578-ck292          1/1     Running   0          7h11m
+book-64845868cb-8p4wb           1/1     Running   0          7h11m
+gateway-574ddff655-nxzqd        1/1     Running   0          7h11m
+marketing-75f8df48cf-5qtp4      1/1     Running   0          7h11m
+mypage-7cc6754454-f5wmw         1/1     Running   0          7h11m
+pay-5df7cd74dc-r25jm            1/1     Running   0          7h11m
+room-5bbf64744-m65nw            1/1     Running   0          7m15s
+room-5cbc9fbf7d-ksspv           0/1     Running   0          34s
+servicecenter-fbbd79979-f4fgt   1/1     Running   0          7h11m
+siege                           1/1     Running   0          23m
+```
+
+- 동일한 시나리오로 재배포 한 후 Availability 확인:
+
+```
+Lifting the server siege...
+Transactions:                  26674 hits
+Availability:                 100.00 %
+Elapsed time:                 359.21 secs
+Data transferred:               8.62 MB
+Response time:                  0.01 secs
+Transaction rate:              74.26 trans/sec
+Throughput:                     0.02 MB/sec
+Concurrency:                    0.99
+Successful transactions:       26674
+Failed transactions:               1
+Longest transaction:            1.71
+Shortest transaction:           0.00
+```
+
+### ConfigMap 사용
+
+시스템별로 또는 운영중에 동적으로 변경 가능성이 있는 설정들을 ConfigMap을 사용하여 관리합니다.
+
+- configmap.yaml
+
+```
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myhotel-config
+  namespace: myhotel
+data:
+  api.url.payment: http://pay:8080
+  alarm.prefix: Hello
+  marketing.prefix: World
+```
+
+- marketing.yaml (configmap 사용)
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marketing
+  namespace: myhotel
+  labels:
+    app: marketing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: marketing
+  template:
+    metadata:
+      labels:
+        app: marketing
+    spec:
+      containers:
+        - name: marketing
+          image: 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-marketing:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: marketing.prefix
+              valueFrom:
+                configMapKeyRef:
+                  name: myhotel-config
+                  key: marketing.prefix
+          readinessProbe:
+            httpGet:
+              path: '/actuator/health'
+              port: 8080
+            initialDelaySeconds: 10
+            timeoutSeconds: 2
+            periodSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: '/actuator/health'
+              port: 8080
+            initialDelaySeconds: 120
+            timeoutSeconds: 2
+            periodSeconds: 5
+            failureThreshold: 5
+```
+
+- kubectl describe pod marketing-75f8df48cf-5qtp4 -n myhotel
+
+```
+Name:         marketing-75f8df48cf-5qtp4
+Namespace:    myhotel
+Priority:     0
+Node:         ip-192-168-77-144.ap-southeast-1.compute.internal/192.168.77.144
+Start Time:   Thu, 03 Jun 2021 17:23:26 +0000
+Labels:       app=marketing
+              pod-template-hash=75f8df48cf
+Annotations:  kubernetes.io/psp: eks.privileged
+Status:       Running
+IP:           192.168.91.31
+IPs:
+  IP:           192.168.91.31
+Controlled By:  ReplicaSet/marketing-75f8df48cf
+Containers:
+  marketing:
+    Container ID:   docker://412835e809e4514c6232575693b5b99b76e9de7f3dc8f3ae03fff2e47e45257e
+    Image:          879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-marketing:latest
+    Image ID:       docker-pullable://879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-marketing@sha256:fbcac072a24cee83e53376f5b8af3e5add0b32ccec1c9e43ec7d6b7d2bea94b5
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Thu, 03 Jun 2021 17:23:30 +0000
+    Ready:          True
+    Restart Count:  0
+    Liveness:       http-get http://:8080/actuator/health delay=120s timeout=2s period=5s #success=1 #failure=5
+    Readiness:      http-get http://:8080/actuator/health delay=10s timeout=2s period=5s #success=1 #failure=10
+    Environment:
+      marketing.prefix:  <set to the key 'marketing.prefix' of config map 'myhotel-config'>  Optional: false
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from default-token-947xz (ro)
+Conditions:
+  Type              Status
+  Initialized       True 
+  Ready             True 
+  ContainersReady   True 
+  PodScheduled      True 
+Volumes:
+  default-token-947xz:
+    Type:        Secret (a volume populated by a Secret)
+    SecretName:  default-token-947xz
+    Optional:    false
+QoS Class:       BestEffort
+Node-Selectors:  <none>
+Tolerations:     node.kubernetes.io/not-ready:NoExecute for 300s
+                 node.kubernetes.io/unreachable:NoExecute for 300s
+Events:          <none>
+```
+
+### Self-healing (Liveness Probe)
+pod가 죽었을때 다시 살아나는지 확인
+
+- room.yaml 수정(liveness 적용 및 cpu, memory limit 적용)
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: room
+  namespace: myhotel
+  labels:
+    app: room
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: room
+  template:
+    metadata:
+      labels:
+        app: room
+    spec:
+      containers:
+        - name: room
+          image: 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-room:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: 500m
+            requests:
+              cpu: 200m
+```
+
+- siege로 부하테스트 진행
+
+```
+$ siege -v -c255 -t360S -r10 --content-type "application/json" 'http://a4fd531f242294642ae968cf3e09a367-1307748764.ap-southeast-1.elb.amazonaws.com:8080/rooms POST {"price":1000}'
+```
+
+- Pod가 Memory 부족으로 인해 죽고 restart 되는것을 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120733690-9ab44f00-c522-11eb-886e-3834bd4e322e.png)
+
+- Pod가 liveness probe에 의해 restart 된 것을 확인
+
+```
+Name:         room-6c97d8fb99-thw6n
+Namespace:    myhotel
+Priority:     0
+Node:         ip-192-168-59-108.ap-southeast-1.compute.internal/192.168.59.108
+Start Time:   Fri, 04 Jun 2021 01:45:45 +0000
+Labels:       app=room
+              pod-template-hash=6c97d8fb99
+Annotations:  kubernetes.io/psp: eks.privileged
+Status:       Running
+IP:           192.168.62.207
+IPs:
+  IP:           192.168.62.207
+Controlled By:  ReplicaSet/room-6c97d8fb99
+Containers:
+  room:
+    Container ID:   docker://f97473766321022b948c4738f3c4ec60d20945ae25ae22ac1fb326524b77a282
+    Image:          879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-room:latest
+    Image ID:       docker-pullable://879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-room@sha256:a9edeee495865bcd6c304c3d0e2896784cd4c357289ac0aee40b5223510f91ef
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Fri, 04 Jun 2021 01:47:57 +0000
+    Last State:     Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Fri, 04 Jun 2021 01:45:47 +0000
+      Finished:     Fri, 04 Jun 2021 01:47:55 +0000
+    Ready:          True
+    Restart Count:  1
+    Limits:
+      cpu:     300m
+      memory:  256Mi
+    Requests:
+      cpu:        100m
+      memory:     64Mi
+    Liveness:     http-get http://:8080/actuator/health delay=120s timeout=2s period=5s #success=1 #failure=5
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from default-token-947xz (ro)
+Conditions:
+  Type              Status
+  Initialized       True 
+  Ready             True 
+  ContainersReady   True 
+  PodScheduled      True 
+Volumes:
+  default-token-947xz:
+    Type:        Secret (a volume populated by a Secret)
+    SecretName:  default-token-947xz
+    Optional:    false
+QoS Class:       Burstable
+Node-Selectors:  <none>
+Tolerations:     node.kubernetes.io/not-ready:NoExecute for 300s
+                 node.kubernetes.io/unreachable:NoExecute for 300s
+Events:
+  Type     Reason     Age                  From                                                        Message
+  ----     ------     ----                 ----                                                        -------
+  Normal   Scheduled  3m48s                default-scheduler                                           Successfully assigned myhotel/room-6c97d8fb99-thw6n to ip-192-168-59-108.ap-southeast-1.compute.internal
+  Warning  Unhealthy  104s                 kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Liveness probe failed: Get http://192.168.62.207:8080/actuator/health: dial tcp 192.168.62.207:8080: connect: connection refused
+  Warning  Unhealthy  98s                  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Liveness probe failed: Get http://192.168.62.207:8080/actuator/health: read tcp 192.168.59.108:59382->192.168.62.207:8080: read: connection reset by peer
+  Normal   Pulling    97s (x2 over 3m47s)  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Pulling image "879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-room:latest"
+  Normal   Pulled     97s (x2 over 3m46s)  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Successfully pulled image "879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-room:latest"
+  Normal   Created    96s (x2 over 3m46s)  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Created container room
+  Normal   Started    96s (x2 over 3m46s)  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Started container room
+```
