@@ -1,32 +1,31 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: book
+  name: room
   namespace: myhotel
   labels:
-    app: book
+    app: room
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: book
+      app: room
   template:
     metadata:
       labels:
-        app: book
+        app: room
     spec:
       containers:
-        - name: book
-          image: 740569282574.dkr.ecr.ap-northeast-1.amazonaws.com/book:cb1
+        - name: room
+          image: 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-room:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
-          env:
-            - name: api.url.payment
-              valueFrom:
-                configMapKeyRef:
-                  name: myhotel-config
-                  key: api.url.payment
+          resources:
+            limits:
+              cpu: 500m
+            requests:
+              cpu: 200m
           readinessProbe:
             httpGet:
               path: '/actuator/health'
@@ -49,13 +48,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: book
+  name: room
   namespace: myhotel
   labels:
-    app: book
+    app: room
 spec:
   ports:
     - port: 8080
       targetPort: 8080
   selector:
-    app: book
+    app: room

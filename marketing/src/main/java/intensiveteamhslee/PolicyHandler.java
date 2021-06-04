@@ -18,9 +18,9 @@ public class PolicyHandler{
         if(!booked.validate()) return;
 
         System.out.println("\n\n##### listener BookAdd : " + booked.toJson() + "\n\n");
-
-        // Sample Logic //
-        Marketing marketing = new Marketing();
+        
+        Marketing marketing = marketingRepository.findByRoomId(booked.getRoomId());
+        marketing.setBookCount(marketing.getBookCount() + 1);
         marketingRepository.save(marketing);
             
     }
@@ -31,8 +31,9 @@ public class PolicyHandler{
 
         System.out.println("\n\n##### listener RoomAdd : " + roomRegistered.toJson() + "\n\n");
 
-        // Sample Logic //
         Marketing marketing = new Marketing();
+        marketing.setRoomId(roomRegistered.getId());
+        marketing.setBookCount(0);
         marketingRepository.save(marketing);
             
     }

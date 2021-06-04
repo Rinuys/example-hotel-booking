@@ -9,6 +9,7 @@ public class Book {
     private Date startDate;
     private Date endDate;
     private String status;
+    private Integer price;
 
     public Long getId() {
         return id;
@@ -39,6 +40,14 @@ public class Book {
     }
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Integer getPrice() {
+        return price;
+    }
+
+    public void setPrice(Integer price) {
+        this.price = price;
     }
 
 }

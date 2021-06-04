@@ -16,6 +16,7 @@ public class Book {
     private Date startDate;
     private Date endDate;
     private String status;
+    private Integer price;
 
     @PostPersist
     public void onPostPersist(){
@@ -28,6 +29,12 @@ public class Book {
 
         intensiveteamhslee.external.Payment payment = new intensiveteamhslee.external.Payment();
         // mappings goes here
+        payment.setBookId(booked.getId());
+        payment.setBookStatus("BookPaied");
+        payment.setEndDate(booked.getEndDate());
+        payment.setStartDate(booked.getStartDate());
+        payment.setRoomId(booked.getRoomId());
+        payment.setPrice(booked.getPrice());
         BookApplication.applicationContext.getBean(intensiveteamhslee.external.PaymentService.class)
             .pay(payment);
 
@@ -39,8 +46,6 @@ public class Book {
         BookCanceled bookCanceled = new BookCanceled();
         BeanUtils.copyProperties(this, bookCanceled);
         bookCanceled.publishAfterCommit();
-
-
     }
 
 
@@ -79,7 +84,13 @@ public class Book {
     public void setStatus(String status) {
         this.status = status;
     }
+    public void setPrice(Integer price){
+        this.price = price;
+    }
 
+    public Integer getPrice(){
+        return price;
+    }
 
 
 

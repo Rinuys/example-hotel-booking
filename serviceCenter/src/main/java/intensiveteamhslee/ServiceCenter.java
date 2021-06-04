@@ -17,30 +17,33 @@ public class ServiceCenter {
 
     @PostPersist
     public void onPostPersist(){
-        BookCanceledByService bookCanceledByService = new BookCanceledByService();
-        BeanUtils.copyProperties(this, bookCanceledByService);
-        bookCanceledByService.publishAfterCommit();
+        if(bookId != null){
+            BookCanceledByService bookCanceledByService = new BookCanceledByService();
+            BeanUtils.copyProperties(this, bookCanceledByService);
+            bookCanceledByService.publishAfterCommit();
 
-        //Following code causes dependency to external APIs
-        // it is NOT A GOOD PRACTICE. instead, Event-Policy mapping is recommended.
+            //Following code causes dependency to external APIs
+            // it is NOT A GOOD PRACTICE. instead, Event-Policy mapping is recommended.
 
-        intensiveteamhslee.external.Book book = new intensiveteamhslee.external.Book();
-        // mappings goes here
-        ServiceCenterApplication.applicationContext.getBean(intensiveteamhslee.external.BookService.class)
-            .bookCancel(book);
+            intensiveteamhslee.external.Book book = new intensiveteamhslee.external.Book();
+            // mappings goes here
+            ServiceCenterApplication.applicationContext.getBean(intensiveteamhslee.external.BookService.class).
+                bookCancel(bookId);;
+        }
 
+        if(roomId != null){
+            RoomDeletedByService roomDeletedByService = new RoomDeletedByService();
+            BeanUtils.copyProperties(this, roomDeletedByService);
+            roomDeletedByService.publishAfterCommit();
 
-        RoomDeletedByService roomDeletedByService = new RoomDeletedByService();
-        BeanUtils.copyProperties(this, roomDeletedByService);
-        roomDeletedByService.publishAfterCommit();
+            //Following code causes dependency to external APIs
+            // it is NOT A GOOD PRACTICE. instead, Event-Policy mapping is recommended.
 
-        //Following code causes dependency to external APIs
-        // it is NOT A GOOD PRACTICE. instead, Event-Policy mapping is recommended.
-
-        intensiveteamhslee.external.Room room = new intensiveteamhslee.external.Room();
-        // mappings goes here
-        ServiceCenterApplication.applicationContext.getBean(intensiveteamhslee.external.RoomService.class)
-            .deleteRoom(room);
+            intensiveteamhslee.external.Room room = new intensiveteamhslee.external.Room();
+            // mappings goes here
+            ServiceCenterApplication.applicationContext.getBean(intensiveteamhslee.external.RoomService.class)
+                .deleteRoom(roomId);
+        }
 
 
     }

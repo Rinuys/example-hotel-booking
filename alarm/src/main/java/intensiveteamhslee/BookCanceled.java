@@ -10,6 +10,7 @@ public class BookCanceled extends AbstractEvent {
     private Date startDate;
     private Date endDate;
     private String status;
+    private Integer price;
 
     public Long getId() {
         return id;
@@ -45,6 +46,14 @@ public class BookCanceled extends AbstractEvent {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public void setPrice(Integer price){
+        this.price = price;
+    }
+
+    public Integer getPrice(){
+        return price;
     }
 }
 

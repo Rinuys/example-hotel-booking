@@ -21,6 +21,7 @@ public class PolicyHandler{
 
         // Sample Logic //
         Notification notification = new Notification();
+        notification.setMessage("PaymentApproved id="+paymentApproved.getId());
         notificationRepository.save(notification);
             
     }
@@ -33,6 +34,7 @@ public class PolicyHandler{
 
         // Sample Logic //
         Notification notification = new Notification();
+        notification.setMessage("PaymentCanceled id="+paymentCanceled.getId());
         notificationRepository.save(notification);
             
     }
@@ -45,6 +47,7 @@ public class PolicyHandler{
 
         // Sample Logic //
         Notification notification = new Notification();
+        notification.setMessage("BookCanceled id="+ bookCanceled.getId());
         notificationRepository.save(notification);
             
     }
@@ -57,6 +60,7 @@ public class PolicyHandler{
 
         // Sample Logic //
         Notification notification = new Notification();
+        notification.setMessage("Booked id="+booked.getId());
         notificationRepository.save(notification);
             
     }
