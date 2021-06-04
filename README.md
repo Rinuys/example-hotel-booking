@@ -1805,4 +1805,185 @@ Events:
 ```
 
 ### build 파이프라인 적용
+code를 수정하고 github에 push하면 자동으로 eks에 배포되는 Build Pipeline을 구성하여 배포를 자동화함
 
+- 클러스터에 접근 가능한 Service Account 생성
+
+```
+$ vi sa.yaml
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eks-admin
+  namespace: kube-system
+  
+$ kubectl create -f sa.yaml
+```
+
+- 그런다음 eks-admin SA에게 ClusterRole 을 부여
+
+```
+$ cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: eks-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: eks-admin
+  namespace: kube-system
+EOF
+```
+
+- token을 찾아서 저장해둠.
+
+```
+$ kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep eks-admin | awk "{print $1}")
+안될경우, $ kubectl -n kube-system get secret | grep eks-admin | awk "{print $1}" 에서 나온 첫번째 값으로 kubectl describe
+```
+
+- 대상 ECR 레파지토리에 scanOnPush=true로 세팅.
+
+- AWS CodeBuild 설정
+
+```
+AWS 콘솔에서 Codebuild 로 검색하여 설정화면으로 진입한다. 새로운 빌드를 생성하고 다음과 같이 설정한다:
+
+소스: Github
+(OAuth 를 이용하여 토큰으로 연결 상태에서) 하단의 “Github 연결” 클릭
+권한 팝업의 맨 하단 Authorize 클릭
+잠시후, 내 레포지토리에서 example-hotel-booking 프로젝트 선택
+기본소스 Webhook 의 설정이 표시되어야 하며, 이때 설정을 해주어야 소스변경에 따라 자동으로 빌드가 트리거 된다.
+환경
+운영체제: Ubuntu
+런타임: Standard
+이미지: aws/codebuild/standard:3.0
+추가구성:
+도커 권한관련 체크박스에 체크(필수)
+환경변수 에 다음 3가지 내역 입력:
+
+AWS_ACCOUNT_ID
+KUBE_URL
+KUBE_TOKEN
+각 값은, 1. AWS 콘솔로그인시에 사용된 URL 의 숫자부분(…) 입력 2. AWS EKS 콘솔에서 얻은 Kube API Endpoint, 3. Kubectl 로 얻은 토큰을 입력
+```
+
+- cloudbuild.yaml 소스코드의 편집
+
+```
+version: 0.2
+
+env:
+  variables:
+    _PROJECT_NAME: "marketing"
+    _REPOSITORY_NAME: "user11-marketing"
+
+phases:
+  install:
+    runtime-versions:
+      java: openjdk8
+      docker: 18
+    commands:
+      - echo install kubectl
+      - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+      - chmod +x ./kubectl
+      - mv ./kubectl /usr/local/bin/kubectl
+      - docker login --username AWS -p $(aws ecr get-login-password --region ap-southeast-1) 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/
+      - docker ps
+
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - echo $_REPOSITORY_NAME
+      - echo $AWS_ACCOUNT_ID
+      - echo $AWS_DEFAULT_REGION
+      - echo $CODEBUILD_RESOLVED_SOURCE_VERSION
+      - echo start command
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - cd marketing
+      - mvn package -Dmaven.test.skip=true
+      - docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$_REPOSITORY_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION  .
+  post_build:
+    commands:
+      - echo Pushing the Docker image...
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$_REPOSITORY_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION
+      - echo connect kubectl
+      - kubectl config set-cluster k8s --server="$KUBE_URL" --insecure-skip-tls-verify=true
+      - kubectl config set-credentials admin --token="$KUBE_TOKEN"
+      - kubectl config set-context default --cluster=k8s --user=admin
+      - kubectl config use-context default
+      - |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: $_PROJECT_NAME
+            labels:
+              app: $_PROJECT_NAME
+          spec:
+            ports:
+              - port: 8080
+                targetPort: 8080
+            selector:
+              app: $_PROJECT_NAME
+          EOF
+      - |
+          cat  <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: $_PROJECT_NAME
+            labels:
+              app: $_PROJECT_NAME
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: $_PROJECT_NAME
+            template:
+              metadata:
+                labels:
+                  app: $_PROJECT_NAME
+              spec:
+                containers:
+                  - name: $_PROJECT_NAME
+                    image: $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$_REPOSITORY_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION
+                    ports:
+                      - containerPort: 8080
+                    readinessProbe:
+                      httpGet:
+                        path: /actuator/health
+                        port: 8080
+                      initialDelaySeconds: 10
+                      timeoutSeconds: 2
+                      periodSeconds: 5
+                      failureThreshold: 10
+                    livenessProbe:
+                      httpGet:
+                        path: /actuator/health
+                        port: 8080
+                      initialDelaySeconds: 120
+                      timeoutSeconds: 2
+                      periodSeconds: 5
+                      failureThreshold: 5
+          EOF
+cache:
+  paths:
+    - '/root/.m2/**/*'
+```
+
+- github으로 code commit 및 push
+
+![image](https://user-images.githubusercontent.com/11704927/120747736-89783c00-c53c-11eb-9533-eb25431108fd.png)
+
+- AWS CodeBuild에서 정상 동작 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120747991-fab7ef00-c53c-11eb-9277-f59daa94d234.png)
