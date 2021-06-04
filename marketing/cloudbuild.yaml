@@ -14,12 +14,8 @@ phases:
       - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
       - chmod +x ./kubectl
       - mv ./kubectl /usr/local/bin/kubectl
-      - apt update
-      - apt upgrade -y
-      - apt install systemd -y
-      - systemctl enable docker.service
-      - systemctl enable containerd.service
-      - docker ps
+      - docker login --username AWS -p $(aws ecr get-login-password --region ap-southeast-1) 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/
+
   pre_build:
     commands:
       - echo Logging in to Amazon ECR...
