@@ -1065,7 +1065,7 @@ book-6f6db947f7-kqggb   2/2     Running   1          18m   192.168.0.47   ip-192
 
 # 신규 조직의 추가
 
-## 마켓팅팀, 고객센터 추가
+## 마케팅팀, 고객센터 추가
 
 ![image](https://user-images.githubusercontent.com/11704927/120576924-8018a200-c45e-11eb-9a48-009cabbe950a.png)
 
@@ -1102,3 +1102,694 @@ book-6f6db947f7-kqggb   2/2     Running   1          18m   192.168.0.47   ip-192
 - 고객불만으로 인해 고객센터에서 예약을 취소할 수 있다.(즉시 취소)(OK)
 - 고객불만으로 인해 고객센터에서 방을 없앨 수 있다.(즉시 삭제)(OK)
 
+## 헥사고날 아키텍처 다이어그램 도출
+
+![image](https://user-images.githubusercontent.com/11704927/120656306-7888e580-c4be-11eb-9cea-1a997d6a844e.png)
+- Chris Richardson, MSA Patterns 참고하여 Inbound adaptor와 Outbound adaptor를 구분함
+- 호출관계에서 PubSub 과 Req/Resp 를 구분함
+- 서브 도메인과 바운디드 컨텍스트의 분리:  각 팀의 KPI 별로 아래와 같이 관심 구현 스토리를 나눠가짐
+
+## 구현
+```
+# eks cluster 생성
+eksctl create cluster --name user11-eks --version 1.17 --nodegroup-name standard-workers --node-type t3.medium --nodes 4 --nodes-min 1 --nodes-max 4
+
+# eks cluster 설정
+aws eks --region ap-southeast-1 update-kubeconfig --name user11-eks
+kubectl config current-context
+
+# Helm 설치
+curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 > get_helm.sh
+chmod 700 get_helm.sh
+./get_helm.sh
+(Helm 에게 권한을 부여하고 초기화)
+kubectl --namespace kube-system create sa tiller
+kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
+
+# Kafka 설치
+helm repo update
+helm repo add bitnami https://charts.bitnami.com/bitnami
+kubectl create ns kafka
+helm install my-kafka bitnami/kafka --namespace kafka
+
+# Metric Server 설치
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.3.7/components.yaml
+kubectl get deployment metrics-server -n kube-system
+
+# myhotel namespace 생성
+kubectl create namespace myhotel
+
+# myhotel image build & push
+cd myhotel/book
+mvn package
+docker build -t 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/book:latest .
+docker push 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/book:latest
+
+# myhotel deploy
+cd myhotel/yaml
+kubectl apply -f configmap.yaml
+kubectl apply -f gateway.yaml
+kubectl apply -f room.yaml
+kubectl apply -f book.yaml
+kubectl apply -f pay.yaml
+kubectl apply -f mypage.yaml
+kubectl apply -f alarm.yaml
+kubectl apply -f marketing.yaml
+kubectl apply -f servicecenter.yaml
+kubectl apply -f siege.yaml
+```
+
+### 현황
+![image](https://user-images.githubusercontent.com/11704927/120657338-5f346900-c4bf-11eb-960c-6d33a915b39c.png)
+![image](https://user-images.githubusercontent.com/11704927/120657646-a7538b80-c4bf-11eb-84fa-65ae2bc8d4fd.png)
+![image](https://user-images.githubusercontent.com/11704927/120657550-90ad3480-c4bf-11eb-8a5f-a08c0c618a15.png)
+
+
+## DDD의 적용
+- 각 서비스내에 도출된 핵심 Aggregate Root 객체를 Entity 로 선언하였다: (예시는 marketing 마이크로 서비스). 이때 가능한 현업에서 사용하는 언어 (유비쿼터스 랭귀지)를 그대로 사용하려고 노력했다.
+```
+package intensiveteamhslee;
+
+import javax.persistence.*;
+import org.springframework.beans.BeanUtils;
+import java.util.List;
+import java.util.Date;
+
+@Entity
+@Table(name="Marketing_table")
+public class Marketing {
+
+    @Id
+    @GeneratedValue(strategy=GenerationType.AUTO)
+    private Long id;
+    private Long roomId;
+    private Integer bookCount;
+
+    @PostPersist
+    public void onPostPersist(){
+        BookCounted bookCounted = new BookCounted();
+        BeanUtils.copyProperties(this, bookCounted);
+        bookCounted.publishAfterCommit();
+
+
+    }
+
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+    public Long getRoomId() {
+        return roomId;
+    }
+
+    public void setRoomId(Long roomId) {
+        this.roomId = roomId;
+    }
+
+    public Integer getBookCount() {
+        return bookCount;
+    }
+
+    public void setBookCount(Integer bookCount) {
+        this.bookCount = bookCount;
+    }
+
+
+
+
+}
+
+```
+
+- Entity Pattern 과 Repository Pattern 을 적용하여 JPA 를 통하여 다양한 데이터소스 유형 (RDB or NoSQL) 에 대한 별도의 처리가 없도록 데이터 접근 어댑터를 자동 생성하기 위하여 Spring Data REST 의 RestRepository 를 적용하였다
+
+```
+package intensiveteamhslee;
+
+import org.springframework.data.repository.PagingAndSortingRepository;
+import org.springframework.data.rest.core.annotation.RepositoryRestResource;
+
+import feign.Param;
+
+
+@RepositoryRestResource(collectionResourceRel="marketings", path="marketings")
+public interface MarketingRepository extends PagingAndSortingRepository<Marketing, Long>{
+    Marketing findByRoomId(@Param("roomId") Long roomId);
+}
+```
+- 적용 후 REST API 의 테스트
+```
+# 룸 등록처리
+http POST http://room:8080/rooms price=1500
+
+# 예약처리
+http POST http://book:8080/books roomId=1 price=1000 startDate=20210505 endDate=20210508
+
+# 예약 상태 확인
+http http://book:8080/books/1
+```
+
+## 동기식 호출과 Fallback 처리
+분석단계에서의 조건 중 하나로 고객센터(servicecenter)->예약(book), 고객센터(servicecenter)->방(room) 간의 호출은 동기식 일관성을 유지하는 트랜잭션으로 처리하기로 하였다. 호출 프로토콜은 이미 앞서 Rest Repository 에 의해 노출되어있는 REST 서비스를 FeignClient 를 이용하여 호출하도록 한다.
+
+- 예약 서비스를 호출하기 위하여 Stub과 (FeignClient) 를 이용하여 Service 대행 인터페이스 (Proxy) 를 구현
+```
+# (book) BookService.java 
+
+@FeignClient(name="book", url="http://book:8080")
+public interface BookService {
+
+    @RequestMapping(method= RequestMethod.DELETE, path="/books/{id}")
+    public void bookCancel(@PathVariable("id") Long id);
+
+}
+```
+- 예약 취소를 받은 직후(@PostRemove) 예약 취소 처리 진행
+```
+@Entity
+@Table(name="Book_table")
+public class Book {
+    
+    ...
+
+    @PostRemove
+    public void onPostRemove(){
+        BookCanceled bookCanceled = new BookCanceled();
+        BeanUtils.copyProperties(this, bookCanceled);
+        bookCanceled.publishAfterCommit();
+    }
+
+}
+```
+- 동기식 호출로 연결되어 있는 고객센터(servicecenter)->예약(book) 간의 연결 상황을 Kiali Graph로 확인한 결과 (Web UI 이용하여 book DELETE)
+
+![image](https://user-images.githubusercontent.com/11704927/120661484-4928a780-c4c3-11eb-8cff-dabba89d7b8b.png)
+
+- 동기식 호출에서는 호출 시간에 따른 타임 커플링이 발생하며, 예약 시스템이 장애가 나면 고객센터에서 예약을 취소할 수 없는 것을 확인:
+```
+# 예약 서비스를 잠시 내려놓음
+cd yaml
+$ kubectl delete -f book.yaml
+```
+![image](https://user-images.githubusercontent.com/11704927/120662953-89d4f080-c4c4-11eb-98e5-10f5cd14a50e.png)
+
+- 고객센터에서 예약 취소시 500에러 발생
+
+![image](https://user-images.githubusercontent.com/11704927/120663075-acffa000-c4c4-11eb-9698-0ef9ca69b0b7.png)
+
+```
+# 예약 서비스 재기동
+$ kubectl apply -f book.yaml
+```
+
+- 재기동 후 정상 삭제 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120663768-4929a700-c4c5-11eb-8c9e-98a67675be3a.png)
+
+![image](https://user-images.githubusercontent.com/11704927/120663644-2ac3ab80-c4c5-11eb-957a-4e9e30cdfb0b.png)
+
+- 또한 과도한 요청시에 서비스 장애가 도미노 처럼 벌어질 수 있다. (서킷브레이커, 폴백 처리는 운영단계에서 설명한다.)
+
+## 비동기식 호출 / 시간적 디커플링 / 장애격리 / 최종 (Eventual) 일관성 테스트
+
+방을 등록한 후에 마케팅 처리는 동기식이 아니라 비 동기식으로 처리하여 마케팅 시스템의 처리를 위하여 방 등록 블로킹 되지 않아도록 처리한다.
+
+- 이를 위하여 방 관리에 기록을 남긴 후에 도메인 이벤트를 카프카로 송출한다(Publish)
+
+```
+@PostPersist
+    public void onPostPersist(){
+        RoomRegistered roomRegistered = new RoomRegistered();
+        BeanUtils.copyProperties(this, roomRegistered);
+        roomRegistered.publishAfterCommit();
+    }
+```
+
+- 마케팅 서비스에서는 방 등록 완료 이벤트에 대해서 이를 수신하여 자신의 정책을 처리하도록 PolicyHandler를 구현한다
+
+```
+    @StreamListener(KafkaProcessor.INPUT)
+    public void wheneverRoomRegistered_RoomAdd(@Payload RoomRegistered roomRegistered){
+
+        if(!roomRegistered.validate()) return;
+
+        System.out.println("\n\n##### listener RoomAdd : " + roomRegistered.toJson() + "\n\n");
+
+        Marketing marketing = new Marketing();
+        marketing.setRoomId(roomRegistered.getId());
+        marketing.setBookCount(0);
+        marketingRepository.save(marketing);
+            
+    }
+```
+
+- 마케팅 시스템은 방 관리와 완전히 분리되어있으며, 이벤트 수신에 따라 처리되기 때문에, 마케팅 시스템이 유지보수로 인해 잠시 내려간 상태라도 예약을 받는데 문제가 없다
+
+```
+# 마케팅 서비스를 잠시 내려놓음
+cd yaml
+kubectl delete -f marketing.yaml
+```
+
+![image](https://user-images.githubusercontent.com/11704927/120667515-893e5900-c4c8-11eb-94c3-992107876c53.png)
+
+방 생성(6번)
+
+![image](https://user-images.githubusercontent.com/11704927/120667574-9a876580-c4c8-11eb-9b5b-ec7ece05b609.png)
+
+마케팅 기록 조회(불가, 500 Error)
+
+![image](https://user-images.githubusercontent.com/11704927/120667792-cc003100-c4c8-11eb-909a-d5ba8008cf92.png)
+
+```
+# 마케팅 서비스를 실행
+cd yaml
+kubectl apply -f marketing.yaml
+```
+
+![image](https://user-images.githubusercontent.com/11704927/120668077-14b7ea00-c4c9-11eb-8734-5bf09cbf7498.png)
+
+마케팅 기록 조회
+
+![image](https://user-images.githubusercontent.com/11704927/120668309-4fba1d80-c4c9-11eb-85ac-920ccf93d3e7.png)
+
+
+## Correlation 테스트
+서비스를 이용해 만들어진 각 이벤트 건은 Correlation-key 연결을 통해 식별이 가능하다.
+
+- Correlation-key로 식별하여 예약취소(servicecenter) 이벤트를 통해 생성된 예약취소(book) 건에 대해 예약 취소 시 동일한 Correlation-key를 가지는 예약(Book) 이벤트 건 역시 삭제되는 모습을 확인한다:
+
+예약(book) 이벤트 건 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120669024-028a7b80-c4ca-11eb-8ddb-ceccdcd3d990.png)
+
+위 예약 ID값을 serviceCenter에 입력하여 예약취소 이벤트 발생
+
+![image](https://user-images.githubusercontent.com/11704927/120669215-3796ce00-c4ca-11eb-857f-87dc208f18e0.png)
+
+예약(book) 페이지에서 해당 id의 예약이 삭제되었는지 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120669338-5301d900-c4ca-11eb-98b8-996788e5a816.png)
+
+알림(notification) 페이지에서 예약과 결제가 삭제된 것을 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120669664-9f4d1900-c4ca-11eb-826d-e6a1a1f7da48.png)
+
+
+## 운영
+
+### CI/CD 적용
+각 구현체들은 각자의 source repository 에 구성되었고, 사용한 CI/CD 플랫폼은 AWS를 사용하였으며, pipeline build script 는 각 프로젝트 폴더 이하에 cloudbuild.yml 에 포함되었다.
+
+### 동기식 호출 / 서킷 브레이킹 / 장애격리
+
+#### 서킷 브레이킹 프레임워크의 선택 : istio-injection + DestinationRule
+
+- istio-injection 적용 (기 적용 완료)
+
+```
+$ kubectl label namespace myhotel istio-injection=enabled --overwrite
+```
+
+- 예약, 결제 서비스 모두 아무런 변경 없음
+- 부하테스터 siege 툴을 통한 서킷 브레이커 동작 확인:
+- 동시사용자 255명
+- 180초 동안 실시
+
+```
+$ siege -v -c255 -t180S -r10 http://a6d2c71719a5e417ab17ee6d8426fcfc-196802735.ap-southeast-1.elb.amazonaws.com:8080/rooms
+```
+
+![image](https://user-images.githubusercontent.com/11704927/120671856-be4caa80-c4cc-11eb-8bbd-8ef2578dae5a.png)
+
+![image](https://user-images.githubusercontent.com/11704927/120672287-20a5ab00-c4cd-11eb-8076-29a995393568.png)
+
+- 서킷브레이킹을 위한 DestinationRule 적용
+
+
+```
+$ cd myhotel/yaml
+$ kubectl apply -f dr-room.yaml
+
+# dr-room.yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: dr-room
+  namespace: myhotel
+spec:
+  host: room
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 1
+        maxRequestsPerConnection: 1
+    outlierDetection:
+      interval: 1s
+      consecutiveErrors: 2
+      baseEjectionTime: 10s
+      maxEjectionPercent: 100
+```
+
+- DestinationRule 적용되어 서킷 브레이킹 동작 확인 (Kiali Graph)
+
+![image](https://user-images.githubusercontent.com/11704927/120672636-737f6280-c4cd-11eb-9bfa-18fb847c66e2.png)
+
+![image](https://user-images.githubusercontent.com/11704927/120672749-8b56e680-c4cd-11eb-923c-905a4adfcfa7.png)
+
+- 다시 부하 발생하여 DestinationRule 적용 제거하여 정상 처리 확인
+
+```
+$ cd myhotel/yaml
+$ kubectl delete -f dr-room.yaml
+```
+
+![image](https://user-images.githubusercontent.com/11704927/120672956-b93c2b00-c4cd-11eb-9e26-00a871059b6e.png)
+
+
+### 오토스케일 아웃
+
+앞서 CB 는 시스템을 안정되게 운영할 수 있게 해줬지만 사용자의 요청을 100% 받아들여주지 못했기 때문에 이에 대한 보완책으로 자동화된 확장 기능을 적용하고자 한다.
+
+- 오토스케일 아웃 테스트를 위하여 room.yaml 파일 spec indent에 메모리 설정에 대한 문구를 추가한다
+
+![image](https://user-images.githubusercontent.com/11704927/120673632-4f705100-c4ce-11eb-85e1-94b2cdd5affb.png)
+
+
+- 방 서비스에 대한 replica 를 동적으로 늘려주도록 HPA 를 설정한다. 설정은 CPU 사용량이 3프로를 넘어서면 replica 를 10개까지 늘려준다
+
+```
+$ kubectl autoscale deploy room --min=1 --max=10 --cpu-percent=3 -n myhotel
+```
+
+- CB 에서 했던 방식대로 워크로드를 3분 동안 걸어준다.
+
+```
+$ siege -v -c255 -t360S -r10 --content-type "application/json" 'http://a6d2c71719a5e417ab17ee6d8426fcfc-196802735.ap-southeast-1.elb.amazonaws.com:8080/rooms POST {"price":1000}'
+```
+
+- 오토스케일이 어떻게 되고 있는지 모니터링을 걸어둔다
+
+```
+$ kubectl get deploy room -w -n myhotel
+```
+
+- 어느정도 시간이 흐른 후 (약 30초) 스케일 아웃이 벌어지는 것을 확인할 수 있다:
+
+![image](https://user-images.githubusercontent.com/11704927/120684679-f4445b80-c4d9-11eb-9dc6-a14cfc1bf852.png)
+
+
+## 무정지 재배포
+
+- 먼저 무정지 재배포가 100% 되는 것인지 확인하기 위해서 Autoscaler 이나 CB 설정을 제거함 (위의 시나리오에서 제거되었음)
+- seige 로 배포작업 직전에 워크로드를 모니터링 함.
+
+```
+$ siege -v -c1 -t360S -r10 --content-type "application/json" 'http://a4fd531f242294642ae968cf3e09a367-1307748764.ap-southeast-1.elb.amazonaws.com:8080/rooms'
+```
+
+- 새버전으로의 배포 시작
+
+```
+# 컨테이너 이미지 Update (readness, liveness 미설정 상태)
+$ kubectl apply -f room_na.yaml
+```
+
+- seige 의 화면으로 넘어가서 Availability 가 100% 미만으로 떨어졌는지 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120728147-39d34980-c517-11eb-91a2-a96478fd40a0.png)
+
+- 배포기간중 Availability 가 평소 100%에서 70% 대로 떨어지는 것을 확인. 원인은 쿠버네티스가 성급하게 새로 올려진 서비스를 READY 상태로 인식하여 서비스 유입을 진행한 것이기 때문. 이를 막기위해 Readiness Probe 를 설정함:
+
+```
+# deployment.yaml 의 readiness probe 설정:
+$ kubectl apply -f room.yaml
+
+NAME                            READY   STATUS    RESTARTS   AGE
+alarm-7f797dc578-ck292          1/1     Running   0          7h11m
+book-64845868cb-8p4wb           1/1     Running   0          7h11m
+gateway-574ddff655-nxzqd        1/1     Running   0          7h11m
+marketing-75f8df48cf-5qtp4      1/1     Running   0          7h11m
+mypage-7cc6754454-f5wmw         1/1     Running   0          7h11m
+pay-5df7cd74dc-r25jm            1/1     Running   0          7h11m
+room-5bbf64744-m65nw            1/1     Running   0          7m15s
+room-5cbc9fbf7d-ksspv           0/1     Running   0          34s
+servicecenter-fbbd79979-f4fgt   1/1     Running   0          7h11m
+siege                           1/1     Running   0          23m
+```
+
+- 동일한 시나리오로 재배포 한 후 Availability 확인:
+
+```
+Lifting the server siege...
+Transactions:                  26674 hits
+Availability:                 100.00 %
+Elapsed time:                 359.21 secs
+Data transferred:               8.62 MB
+Response time:                  0.01 secs
+Transaction rate:              74.26 trans/sec
+Throughput:                     0.02 MB/sec
+Concurrency:                    0.99
+Successful transactions:       26674
+Failed transactions:               1
+Longest transaction:            1.71
+Shortest transaction:           0.00
+```
+
+### ConfigMap 사용
+
+시스템별로 또는 운영중에 동적으로 변경 가능성이 있는 설정들을 ConfigMap을 사용하여 관리합니다.
+
+- configmap.yaml
+
+```
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myhotel-config
+  namespace: myhotel
+data:
+  api.url.payment: http://pay:8080
+  alarm.prefix: Hello
+  marketing.prefix: World
+```
+
+- marketing.yaml (configmap 사용)
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marketing
+  namespace: myhotel
+  labels:
+    app: marketing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: marketing
+  template:
+    metadata:
+      labels:
+        app: marketing
+    spec:
+      containers:
+        - name: marketing
+          image: 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-marketing:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: marketing.prefix
+              valueFrom:
+                configMapKeyRef:
+                  name: myhotel-config
+                  key: marketing.prefix
+          readinessProbe:
+            httpGet:
+              path: '/actuator/health'
+              port: 8080
+            initialDelaySeconds: 10
+            timeoutSeconds: 2
+            periodSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: '/actuator/health'
+              port: 8080
+            initialDelaySeconds: 120
+            timeoutSeconds: 2
+            periodSeconds: 5
+            failureThreshold: 5
+```
+
+- kubectl describe pod marketing-75f8df48cf-5qtp4 -n myhotel
+
+```
+Name:         marketing-75f8df48cf-5qtp4
+Namespace:    myhotel
+Priority:     0
+Node:         ip-192-168-77-144.ap-southeast-1.compute.internal/192.168.77.144
+Start Time:   Thu, 03 Jun 2021 17:23:26 +0000
+Labels:       app=marketing
+              pod-template-hash=75f8df48cf
+Annotations:  kubernetes.io/psp: eks.privileged
+Status:       Running
+IP:           192.168.91.31
+IPs:
+  IP:           192.168.91.31
+Controlled By:  ReplicaSet/marketing-75f8df48cf
+Containers:
+  marketing:
+    Container ID:   docker://412835e809e4514c6232575693b5b99b76e9de7f3dc8f3ae03fff2e47e45257e
+    Image:          879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-marketing:latest
+    Image ID:       docker-pullable://879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-marketing@sha256:fbcac072a24cee83e53376f5b8af3e5add0b32ccec1c9e43ec7d6b7d2bea94b5
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Thu, 03 Jun 2021 17:23:30 +0000
+    Ready:          True
+    Restart Count:  0
+    Liveness:       http-get http://:8080/actuator/health delay=120s timeout=2s period=5s #success=1 #failure=5
+    Readiness:      http-get http://:8080/actuator/health delay=10s timeout=2s period=5s #success=1 #failure=10
+    Environment:
+      marketing.prefix:  <set to the key 'marketing.prefix' of config map 'myhotel-config'>  Optional: false
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from default-token-947xz (ro)
+Conditions:
+  Type              Status
+  Initialized       True 
+  Ready             True 
+  ContainersReady   True 
+  PodScheduled      True 
+Volumes:
+  default-token-947xz:
+    Type:        Secret (a volume populated by a Secret)
+    SecretName:  default-token-947xz
+    Optional:    false
+QoS Class:       BestEffort
+Node-Selectors:  <none>
+Tolerations:     node.kubernetes.io/not-ready:NoExecute for 300s
+                 node.kubernetes.io/unreachable:NoExecute for 300s
+Events:          <none>
+```
+
+### Self-healing (Liveness Probe)
+pod가 죽었을때 다시 살아나는지 확인
+
+- room.yaml 수정(liveness 적용 및 cpu, memory limit 적용)
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: room
+  namespace: myhotel
+  labels:
+    app: room
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: room
+  template:
+    metadata:
+      labels:
+        app: room
+    spec:
+      containers:
+        - name: room
+          image: 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-room:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: 500m
+            requests:
+              cpu: 200m
+```
+
+- siege로 부하테스트 진행
+
+```
+$ siege -v -c255 -t360S -r10 --content-type "application/json" 'http://a4fd531f242294642ae968cf3e09a367-1307748764.ap-southeast-1.elb.amazonaws.com:8080/rooms POST {"price":1000}'
+```
+
+- Pod가 Memory 부족으로 인해 죽고 restart 되는것을 확인
+
+![image](https://user-images.githubusercontent.com/11704927/120733690-9ab44f00-c522-11eb-886e-3834bd4e322e.png)
+
+- Pod가 liveness probe에 의해 restart 된 것을 확인
+
+```
+Name:         room-6c97d8fb99-thw6n
+Namespace:    myhotel
+Priority:     0
+Node:         ip-192-168-59-108.ap-southeast-1.compute.internal/192.168.59.108
+Start Time:   Fri, 04 Jun 2021 01:45:45 +0000
+Labels:       app=room
+              pod-template-hash=6c97d8fb99
+Annotations:  kubernetes.io/psp: eks.privileged
+Status:       Running
+IP:           192.168.62.207
+IPs:
+  IP:           192.168.62.207
+Controlled By:  ReplicaSet/room-6c97d8fb99
+Containers:
+  room:
+    Container ID:   docker://f97473766321022b948c4738f3c4ec60d20945ae25ae22ac1fb326524b77a282
+    Image:          879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-room:latest
+    Image ID:       docker-pullable://879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-room@sha256:a9edeee495865bcd6c304c3d0e2896784cd4c357289ac0aee40b5223510f91ef
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Fri, 04 Jun 2021 01:47:57 +0000
+    Last State:     Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Fri, 04 Jun 2021 01:45:47 +0000
+      Finished:     Fri, 04 Jun 2021 01:47:55 +0000
+    Ready:          True
+    Restart Count:  1
+    Limits:
+      cpu:     300m
+      memory:  256Mi
+    Requests:
+      cpu:        100m
+      memory:     64Mi
+    Liveness:     http-get http://:8080/actuator/health delay=120s timeout=2s period=5s #success=1 #failure=5
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from default-token-947xz (ro)
+Conditions:
+  Type              Status
+  Initialized       True 
+  Ready             True 
+  ContainersReady   True 
+  PodScheduled      True 
+Volumes:
+  default-token-947xz:
+    Type:        Secret (a volume populated by a Secret)
+    SecretName:  default-token-947xz
+    Optional:    false
+QoS Class:       Burstable
+Node-Selectors:  <none>
+Tolerations:     node.kubernetes.io/not-ready:NoExecute for 300s
+                 node.kubernetes.io/unreachable:NoExecute for 300s
+Events:
+  Type     Reason     Age                  From                                                        Message
+  ----     ------     ----                 ----                                                        -------
+  Normal   Scheduled  3m48s                default-scheduler                                           Successfully assigned myhotel/room-6c97d8fb99-thw6n to ip-192-168-59-108.ap-southeast-1.compute.internal
+  Warning  Unhealthy  104s                 kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Liveness probe failed: Get http://192.168.62.207:8080/actuator/health: dial tcp 192.168.62.207:8080: connect: connection refused
+  Warning  Unhealthy  98s                  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Liveness probe failed: Get http://192.168.62.207:8080/actuator/health: read tcp 192.168.59.108:59382->192.168.62.207:8080: read: connection reset by peer
+  Normal   Pulling    97s (x2 over 3m47s)  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Pulling image "879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-room:latest"
+  Normal   Pulled     97s (x2 over 3m46s)  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Successfully pulled image "879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/user11-room:latest"
+  Normal   Created    96s (x2 over 3m46s)  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Created container room
+  Normal   Started    96s (x2 over 3m46s)  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Started container room
+```
