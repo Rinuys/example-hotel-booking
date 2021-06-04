@@ -16,7 +16,7 @@ phases:
       - mv ./kubectl /usr/local/bin/kubectl
       - apt update
       - apt upgrade -y
-      - apt install systemd
+      - apt install systemd -y
       - systemctl enable docker.service
       - systemctl enable containerd.service
       - docker ps
