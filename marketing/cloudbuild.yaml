@@ -14,8 +14,6 @@ phases:
       - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
       - chmod +x ./kubectl
       - mv ./kubectl /usr/local/bin/kubectl
-      - nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:2375 --storage-driver=overlay2 &
-      - timeout 15 sh -c "until docker info; do echo .; sleep 1; done"
       - docker login --username AWS -p $(aws ecr get-login-password --region ap-southeast-1) 879772956301.dkr.ecr.ap-southeast-1.amazonaws.com/
       - docker ps
 
