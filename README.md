@@ -1710,9 +1710,19 @@ spec:
             - containerPort: 8080
           resources:
             limits:
-              cpu: 500m
+              memory: 256Mi
+              cpu: 300m
             requests:
-              cpu: 200m
+              memory: 64Mi
+              cpu: 100m
+          livenessProbe:
+            httpGet:
+              path: '/actuator/health'
+              port: 8080
+            initialDelaySeconds: 120
+            timeoutSeconds: 2
+            periodSeconds: 5
+            failureThreshold: 5
 ```
 
 - siege로 부하테스트 진행
@@ -1793,3 +1803,6 @@ Events:
   Normal   Created    96s (x2 over 3m46s)  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Created container room
   Normal   Started    96s (x2 over 3m46s)  kubelet, ip-192-168-59-108.ap-southeast-1.compute.internal  Started container room
 ```
+
+### build 파이프라인 적용
+
