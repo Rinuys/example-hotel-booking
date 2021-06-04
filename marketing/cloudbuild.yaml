@@ -14,7 +14,9 @@ phases:
       - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
       - chmod +x ./kubectl
       - mv ./kubectl /usr/local/bin/kubectl
-      - sudo docker ps
+      - systemctl enable docker.service
+      - systemctl enable containerd.service
+      - docker ps
   pre_build:
     commands:
       - echo Logging in to Amazon ECR...
